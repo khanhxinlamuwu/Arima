@@ -13,8 +13,7 @@ def vietnam_stock_prediction():
     # List of popular stock tickers (you can add more or load from an external source)
     ticker_list = ["VIC", "VHM", "VNM", "VCB", "HPG"]
 
-    # Streamlit App
-    st.title("Stock Price Prediction with ARIMA")
+
 
     # Searchable dropdown for stock tickers
     ticker = st.selectbox("Select stock ticker:", ticker_list)
