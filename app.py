@@ -5,15 +5,15 @@ from statsmodels.tsa.arima.model import ARIMA
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
 from datetime import timedelta
-
 import pandas as pd
 from vnstock3 import Vnstock  # Ensure vnstock3 is installed
 
 # Initialize vnstock3 client
-client = Vnstock()
+client = Vnstock()  # Khởi tạo đối tượng client
 
 # Streamlit App
 st.title("Stock Price Prediction with ARIMA")
+
 # Select Market
 market_choice = st.selectbox("Choose Market:", ["Global Stocks", "Vietnam Stocks"])
 
@@ -24,38 +24,70 @@ vietnam_ticker_list = ["VIC", "VHM", "VNM", "VCB", "HPG"]
 # Choose ticker based on selected market
 if market_choice == "Global Stocks":
     ticker = st.selectbox("Select global stock ticker:", global_ticker_list)
-    data_fetch_function = yf.download
 else:
     ticker = st.selectbox("Select Vietnam stock ticker:", vietnam_ticker_list)
-    data_fetch_function = client.stock_price
+
+# Function to fetch Vietnam stock data using vnstock3
+def fetch_vietnam_stock(client, ticker, start_date, end_date):
+    try:
+        data = client.get_price(ticker=ticker, start_date=start_date, end_date=end_date)
+        return data
+    except Exception as e:
+        st.error(f"Error fetching data: {e}")
+        return pd.DataFrame()
 
 end_date = st.date_input("End date")
 
 # Fetch data for selected ticker and date
 if ticker and end_date:
     if market_choice == "Global Stocks":
-        data = data_fetch_function(ticker, end=end_date.strftime("%Y-%m-%d"))
+        data = yf.download(ticker)
     else:
-        data = data_fetch_function(ticker=ticker, end_date=end_date.strftime("%Y-%m-%d"))
+        # Set default start and end dates
+        start_date = (pd.to_datetime(end_date) - timedelta(days=365 * 10)).strftime("%Y-%m-%d")
+        end_date = pd.to_datetime(end_date).strftime("%Y-%m-%d")
+        data = fetch_vietnam_stock(client, ticker, start_date, end_date)
 
     # Check if data is empty
-    if data is None or data.empty:
+    if data.empty:
         st.error("No data found for this ticker.")
     else:
-        # Ensure data processing is consistent for both data sources
-        if market_choice == "Global Stocks":
-            data['Date'] = data.index
-        else:
-            data['Date'] = pd.to_datetime(data['date'])
+        # Get the first available date and localize it to None (tz-naive)
+        first_date = data.index[0].tz_localize(None) if market_choice == "Global Stocks" else pd.to_datetime(data['date']).min()
+        ten_years_ago = pd.Timestamp(end_date).tz_localize(None) - timedelta(days=365*10)
+
+        # Check if data has less than 10 years
+        if pd.Timestamp(first_date) > pd.Timestamp(ten_years_ago):
+            st.warning(f"Data for {ticker} has less than 10 years. Available from {first_date}.")
+            if not st.checkbox("Do you want to continue with the available data?"):
+                st.stop()
+
+        # Set default start_date to the maximum between ten_years_ago or first available date
+        default_start_date = max(ten_years_ago, first_date)
+
+        # Allow the user to modify the start date
+        start_date = st.date_input("Start date", value=default_start_date)
+
+        # Convert start_date and end_date to timezone-naive
+        start_date = pd.Timestamp(start_date).tz_localize(None)
+        end_date = pd.Timestamp(end_date).tz_localize(None)
+
+        # Calculate the time difference between start_date and end_date
+        time_difference = (pd.Timestamp(end_date) - pd.Timestamp(start_date)).days
+        ten_years_in_days = 365 * 10
+
+        # Check if the data range is less than 10 years
+        if time_difference < ten_years_in_days:
+            st.warning(f"The selected date range has less than 10 years of data ({time_difference // 365} years).")
 
         # Display the plot of the stock's historical data
         st.subheader(f"Historical Data for {ticker}")
         fig, ax = plt.subplots(figsize=(12, 6))
         
         if market_choice == "Global Stocks":
-            ax.plot(data['Date'], data['Close'], label='Historical Price', color='blue')
+            ax.plot(data['Close'], label='Historical Price', color='blue')
         else:
-            ax.plot(data['Date'], data['close'], label='Historical Price', color='blue')
+            ax.plot(pd.to_datetime(data['date']), data['close'], label='Historical Price', color='blue')
 
         ax.set_title(f'Historical Stock Price for {ticker}')
         ax.set_xlabel('Date')
@@ -73,6 +105,12 @@ if ticker and end_date:
         q = st.number_input("Enter q (moving average term):", min_value=0, max_value=10, value=0)
 
         if st.button('Run ARIMA Model'):
+            # Download data within the selected date range
+            if market_choice == "Global Stocks":
+                data = yf.download(ticker, start=start_date, end=end_date)
+            else:
+                data = fetch_vietnam_stock(client, ticker, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
+
             # ARIMA Model
             close_prices = data['Close'] if market_choice == "Global Stocks" else data['close']
             model = ARIMA(close_prices, order=(p, d, q))
@@ -86,7 +124,7 @@ if ticker and end_date:
 
             # Plot actual vs predicted
             fig, ax = plt.subplots(figsize=(12, 6))
-            ax.plot(close_prices.index, close_prices, label='Actual Price', color='blue')
+            ax.plot(close_prices, label='Actual Price', color='blue')
             ax.plot(close_prices.index, y_predicted, label='Predicted Price (ARIMA)', color='orange')
             ax.set_title(f'Stock Price Prediction for {ticker}')
             ax.set_xlabel('Date')
