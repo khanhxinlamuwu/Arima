@@ -8,7 +8,6 @@ import pandas as pd
 from datetime import timedelta
 
 def global_stock_prediction():
-    st.title("Stock Price Prediction with ARIMA")
     # Danh sách mã cổ phiếu toàn cầu
     ticker_list = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "FB", "NVDA", "NFLX", "INTC", "AMD"]
  
