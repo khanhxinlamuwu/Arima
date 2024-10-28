@@ -6,124 +6,89 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
 from datetime import timedelta
 import pandas as pd
-from vnstock3 import Vnstock  # Ensure vnstock3 is installed
+from vnstock3 import Vnstock  # Đảm bảo vnstock3 đã được cài đặt
 
-# Initialize vnstock3 client
-
+# Khởi tạo đối tượng vnstock3 client
+client = Vnstock()
 
 # Streamlit App
-st.title("Stock Price Prediction with ARIMA")
+st.title("Dự Đoán Giá Cổ Phiếu với ARIMA")
 
-# Select Market
-market_choice = st.selectbox("Choose Market:", ["Global Stocks", "Vietnam Stocks"])
+# Chọn Thị Trường
+market_choice = st.selectbox("Chọn Thị Trường:", ["Cổ Phiếu Toàn Cầu", "Cổ Phiếu Việt Nam"])
 
-# Global and Vietnam ticker lists (for demo purposes; expand as needed)
+# Danh sách mã cổ phiếu cho cổ phiếu toàn cầu và Việt Nam
 global_ticker_list = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"]
 vietnam_ticker_list = ["VIC", "VHM", "VNM", "VCB", "HPG"]
 
-# Choose ticker based on selected market
-if market_choice == "Global Stocks":
-    ticker = st.selectbox("Select global stock ticker:", global_ticker_list)
+# Chọn mã cổ phiếu dựa trên thị trường đã chọn
+if market_choice == "Cổ Phiếu Toàn Cầu":
+    ticker = st.selectbox("Chọn mã cổ phiếu toàn cầu:", global_ticker_list)
     data_fetch_function = yf.download
 else:
-    ticker = st.selectbox("Select Vietnam stock ticker:", vietnam_ticker_list)
-    data_fetch_function = Vnstock().stock('VCI', source='VCI')  # Use client to fetch Vietnam stock data
+    ticker = st.selectbox("Chọn mã cổ phiếu Việt Nam:", vietnam_ticker_list)
+    data_fetch_function = client.stock_price
 
-end_date = st.date_input("End date")
+end_date = st.date_input("Ngày kết thúc")
 
-# Fetch data for selected ticker and date
+# Lấy dữ liệu cho mã cổ phiếu đã chọn và ngày
 if ticker and end_date:
-    if market_choice == "Global Stocks":
-        data = data_fetch_function(ticker)
+    if market_choice == "Cổ Phiếu Toàn Cầu":
+        data = data_fetch_function(ticker, end=end_date)
     else:
         data = data_fetch_function(ticker)
 
-    # Check if data is empty
+    # Kiểm tra nếu dữ liệu rỗng
     if data.empty:
-        st.error("No data found for this ticker.")
+        st.error("Không tìm thấy dữ liệu cho mã cổ phiếu này.")
     else:
-        # Get the first available date and localize it to None (tz-naive)
-        first_date = data.index[0].tz_localize(None) if market_choice == "Global Stocks" else pd.to_datetime(data['date']).min()
-        ten_years_ago = pd.Timestamp(end_date).tz_localize(None) - timedelta(days=365*10)
-
-        # Check if data has less than 10 years
-        if pd.Timestamp(first_date) > pd.Timestamp(ten_years_ago):
-            st.warning(f"Data for {ticker} has less than 10 years. Available from {first_date}.")
-            if not st.checkbox("Do you want to continue with the available data?"):
-                st.stop()
-
-        # Set default start_date to the maximum between ten_years_ago or first available date
-        default_start_date = max(ten_years_ago, first_date)
-
-        # Allow the user to modify the start date
-        start_date = st.date_input("Start date", value=default_start_date)
-
-        # Convert start_date and end_date to timezone-naive
-        start_date = pd.Timestamp(start_date).tz_localize(None)
-        end_date = pd.Timestamp(end_date).tz_localize(None)
-
-        # Calculate the time difference between start_date and end_date
-        time_difference = (pd.Timestamp(end_date) - pd.Timestamp(start_date)).days
-        ten_years_in_days = 365 * 10
-
-        # Check if the data range is less than 10 years
-        if time_difference < ten_years_in_days:
-            st.warning(f"The selected date range has less than 10 years of data ({time_difference // 365} years).")
-
-        # Display the plot of the stock's historical data
-        st.subheader(f"Historical Data for {ticker}")
+        # Hiển thị biểu đồ dữ liệu lịch sử của cổ phiếu
+        st.subheader(f"Dữ Liệu Lịch Sử cho {ticker}")
         fig, ax = plt.subplots(figsize=(12, 6))
-        
-        if market_choice == "Global Stocks":
-            ax.plot(data['Close'], label='Historical Price', color='blue')
+        if market_choice == "Cổ Phiếu Toàn Cầu":
+            ax.plot(data['Close'], label='Giá Lịch Sử', color='blue')
         else:
-            ax.plot(pd.to_datetime(data['date']), data['close'], label='Historical Price', color='blue')
-
-        ax.set_title(f'Historical Stock Price for {ticker}')
-        ax.set_xlabel('Date')
-        ax.set_ylabel('Price')
+            data['date'] = pd.to_datetime(data['date'])
+            data.set_index('date', inplace=True)
+            ax.plot(data['close'], label='Giá Lịch Sử', color='blue')
+        
+        ax.set_title(f'Giá Cổ Phiếu Lịch Sử cho {ticker}')
+        ax.set_xlabel('Ngày')
+        ax.set_ylabel('Giá')
         ax.legend()
         ax.grid()
-
-        # Display historical plot
         st.pyplot(fig)
 
-        # ARIMA model input section
-        st.subheader("ARIMA Model Configuration")
-        p = st.number_input("Enter p (autoregressive term):", min_value=0, max_value=10, value=5)
-        d = st.number_input("Enter d (difference term):", min_value=0, max_value=2, value=1)
-        q = st.number_input("Enter q (moving average term):", min_value=0, max_value=10, value=0)
+        # Cấu hình mô hình ARIMA
+        st.subheader("Cấu Hình Mô Hình ARIMA")
+        p = st.number_input("Nhập p (thành phần hồi quy):", min_value=0, max_value=10, value=5)
+        d = st.number_input("Nhập d (thành phần sai khác):", min_value=0, max_value=2, value=1)
+        q = st.number_input("Nhập q (thành phần trung bình động):", min_value=0, max_value=10, value=0)
 
-        if st.button('Run ARIMA Model'):
-            # Download data within the selected date range
-            if market_choice == "Global Stocks":
-                data = yf.download(ticker, start=start_date, end=end_date)
-            else:
-                data = client.stock_price(ticker=ticker, start_date=start_date.strftime("%Y-%m-%d"), end_date=end_date.strftime("%Y-%m-%d"))
-
-            # ARIMA Model
-            close_prices = data['Close'] if market_choice == "Global Stocks" else data['close']
+        if st.button('Chạy Mô Hình ARIMA'):
+            # Mô hình ARIMA
+            close_prices = data['Close'] if market_choice == "Cổ Phiếu Toàn Cầu" else data['close']
             model = ARIMA(close_prices, order=(p, d, q))
             model_fit = model.fit()
 
-            # Predictions
+            # Dự đoán
             y_predicted = model_fit.predict(start=close_prices.index[0], end=close_prices.index[-1])
 
             # RMSE
             rmse = np.sqrt(mean_squared_error(close_prices, y_predicted))
 
-            # Plot actual vs predicted
+            # Hiển thị biểu đồ giá thực tế so với giá dự đoán
             fig, ax = plt.subplots(figsize=(12, 6))
-            ax.plot(close_prices, label='Actual Price', color='blue')
-            ax.plot(close_prices.index, y_predicted, label='Predicted Price (ARIMA)', color='orange')
-            ax.set_title(f'Stock Price Prediction for {ticker}')
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Price')
+            ax.plot(close_prices, label='Giá Thực Tế', color='blue')
+            ax.plot(close_prices.index, y_predicted, label='Giá Dự Đoán (ARIMA)', color='orange')
+            ax.set_title(f'Dự Đoán Giá Cổ Phiếu cho {ticker}')
+            ax.set_xlabel('Ngày')
+            ax.set_ylabel('Giá')
             ax.legend()
             ax.grid()
 
-            # Display prediction plot
+            # Hiển thị biểu đồ dự đoán
             st.pyplot(fig)
 
-            # Display RMSE
-            st.write(f"Root Mean Square Error (RMSE): {rmse}")
+            # Hiển thị RMSE
+            st.write(f"Sai số trung bình bình phương căn (RMSE): {rmse}")
