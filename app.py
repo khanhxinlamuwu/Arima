@@ -30,7 +30,11 @@ else:
 # Function to fetch Vietnam stock data using vnstock3
 def fetch_vietnam_stock(client, ticker, start_date, end_date):
     try:
-        data = client.get_price(ticker=ticker, start_date=start_date, end_date=end_date)
+        # Adjust this function call based on the actual API method provided by vnstock3
+        data = client.stock_price(ticker=ticker, start_date=start_date, end_date=end_date)
+        if 'date' in data.columns and 'close' in data.columns:
+            data['date'] = pd.to_datetime(data['date'])
+            data.set_index('date', inplace=True)
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
@@ -53,7 +57,7 @@ if ticker and end_date:
         st.error("No data found for this ticker.")
     else:
         # Get the first available date and localize it to None (tz-naive)
-        first_date = data.index[0].tz_localize(None) if market_choice == "Global Stocks" else pd.to_datetime(data['date']).min()
+        first_date = data.index[0].tz_localize(None) if market_choice == "Global Stocks" else pd.to_datetime(data.index.min())
         ten_years_ago = pd.Timestamp(end_date).tz_localize(None) - timedelta(days=365*10)
 
         # Check if data has less than 10 years
@@ -87,7 +91,7 @@ if ticker and end_date:
         if market_choice == "Global Stocks":
             ax.plot(data['Close'], label='Historical Price', color='blue')
         else:
-            ax.plot(pd.to_datetime(data['date']), data['close'], label='Historical Price', color='blue')
+            ax.plot(data.index, data['close'], label='Historical Price', color='blue')
 
         ax.set_title(f'Historical Stock Price for {ticker}')
         ax.set_xlabel('Date')
