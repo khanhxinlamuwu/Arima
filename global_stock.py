@@ -5,12 +5,13 @@ from statsmodels.tsa.arima.model import ARIMA
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
 import pandas as pd
+from pmdarima import auto_arima  # Import Auto-ARIMA
 
 def global_stock_prediction():
     st.title("Dự Đoán Giá Cổ Phiếu Toàn Cầu với ARIMA")
 
-    # Danh sách mã cổ phiếu toàn cầu với tên tập đoàn
-    global_ticker_dict = {
+    # Danh sách mã cổ phiếu toàn cầu cùng tên tập đoàn
+    global_ticker_list = {
         "AAPL": "Apple Inc.",
         "MSFT": "Microsoft Corporation",
         "GOOGL": "Alphabet Inc.",
@@ -18,12 +19,8 @@ def global_stock_prediction():
         "TSLA": "Tesla Inc."
     }
     
-    # Tạo danh sách mã cổ phiếu có kèm tên tập đoàn
-    ticker_display_list = [f"{symbol} - {name}" for symbol, name in global_ticker_dict.items()]
-
-    # Chọn mã cổ phiếu với tên tập đoàn
-    selected_ticker = st.selectbox("Chọn mã cổ phiếu toàn cầu:", ticker_display_list)
-    ticker = selected_ticker.split(" - ")[0]  # Lấy mã cổ phiếu từ chuỗi được chọn
+    # Chọn mã cổ phiếu
+    ticker = st.selectbox("Chọn mã cổ phiếu toàn cầu:", list(global_ticker_list.keys()))
     end_date = st.date_input("Ngày kết thúc")
 
     # Lấy dữ liệu
@@ -32,22 +29,37 @@ def global_stock_prediction():
         if data.empty:
             st.error("Không tìm thấy dữ liệu cho mã cổ phiếu này.")
         else:
+            # Hiển thị tên tập đoàn
+            st.subheader(f"Cổ phiếu của {global_ticker_list[ticker]} ({ticker})")
+
             # Hiển thị biểu đồ dữ liệu lịch sử
-            st.subheader(f"Dữ Liệu Lịch Sử cho {global_ticker_dict[ticker]} ({ticker})")
+            st.subheader(f"Dữ Liệu Lịch Sử cho {ticker}")
             fig, ax = plt.subplots(figsize=(12, 6))
             ax.plot(data['Close'], label='Giá Lịch Sử', color='blue')
-            ax.set_title(f'Giá Cổ Phiếu Lịch Sử cho {global_ticker_dict[ticker]} ({ticker})')
+            ax.set_title(f'Giá Cổ Phiếu Lịch Sử cho {ticker}')
             ax.set_xlabel('Ngày')
             ax.set_ylabel('Giá')
             ax.legend()
             ax.grid()
             st.pyplot(fig)
 
-            # Cấu hình mô hình ARIMA
-            st.subheader("Cấu Hình Mô Hình ARIMA")
-            p = st.number_input("Nhập p (thành phần hồi quy):", min_value=0, max_value=10, value=5)
-            d = st.number_input("Nhập d (thành phần sai khác):", min_value=0, max_value=2, value=1)
-            q = st.number_input("Nhập q (thành phần trung bình động):", min_value=0, max_value=10, value=0)
+            # Chạy Auto-ARIMA để tìm tham số tối ưu cho p, d, q
+            st.subheader("Chạy Auto-ARIMA để tìm tham số tối ưu")
+            with st.spinner("Đang chạy Auto-ARIMA..."):
+                auto_arima_model = auto_arima(data['Close'], start_p=0, start_q=0,
+                                              max_p=5, max_q=5, seasonal=False,
+                                              trace=True,  # Hiển thị quá trình thử nghiệm
+                                              error_action='ignore',
+                                              suppress_warnings=True,
+                                              stepwise=True)
+
+            # In ra tham số tối ưu
+            st.write("Tham số tối ưu được tìm thấy bởi Auto-ARIMA:")
+            st.write(auto_arima_model.summary())
+
+            # Sử dụng các tham số tối ưu để dự đoán
+            p, d, q = auto_arima_model.order
+            st.write(f"Sử dụng mô hình ARIMA với tham số (p={p}, d={d}, q={q})")
 
             if st.button('Chạy Mô Hình ARIMA'):
                 close_prices = data['Close']
@@ -60,12 +72,14 @@ def global_stock_prediction():
                 fig, ax = plt.subplots(figsize=(12, 6))
                 ax.plot(close_prices, label='Giá Thực Tế', color='blue')
                 ax.plot(close_prices.index, y_predicted, label='Giá Dự Đoán (ARIMA)', color='orange')
-                ax.set_title(f'Dự Đoán Giá Cổ Phiếu cho {global_ticker_dict[ticker]} ({ticker})')
+                ax.set_title(f'Dự Đoán Giá Cổ Phiếu cho {ticker}')
                 ax.set_xlabel('Ngày')
                 ax.set_ylabel('Giá')
                 ax.legend()
                 ax.grid()
                 st.pyplot(fig)
+                
+                # Hiển thị RMSE
                 st.write(f"Sai số trung bình bình phương căn (RMSE): {rmse}")
 
 # Gọi hàm nếu chọn "Cổ Phiếu Toàn Cầu"
