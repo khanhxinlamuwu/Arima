@@ -8,7 +8,7 @@ import pandas as pd
 from vnstock3 import Vnstock
 
 def vietnam_stock_prediction():
-    ticker_list = ["VIC", "VHM", "VNM", "VCB", "HPG"]
+    ticker_list = ["VIC"]#, "VHM", "VNM", "VCB", "HPG"]
     
     st.title("Dự đoán giá cổ phiếu với ARIMA")
     ticker = st.selectbox("Chọn mã cổ phiếu:", ticker_list)
