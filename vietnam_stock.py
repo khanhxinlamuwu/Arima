@@ -8,7 +8,6 @@ import pandas as pd
 from vnstock3 import Vnstock
 
 def vietnam_stock_prediction():
-
     # List of popular stock tickers with company names
     ticker_list = [
         {"ticker": "VIC", "name": "Vingroup"},
@@ -30,85 +29,87 @@ def vietnam_stock_prediction():
     # Extract selected ticker code
     ticker = ticker_choice.split(" - ")[0]
 
+    # Input for end date
     end_date = st.date_input("End date")
 
-    # Download data to get the available date range
     if ticker and end_date:
-        data1 = Vnstock().stock(symbol=ticker, source='VCI')
-        ten_years_ago = pd.Timestamp(end_date).tz_localize(None) - timedelta(days=365*10)
+        try:
+            # Attempt to fetch data from API
+            data1 = Vnstock().stock(symbol=ticker, source='VCI')
+            ten_years_ago = pd.Timestamp(end_date).tz_localize(None) - timedelta(days=365*10)
+            default_start_date = ten_years_ago
 
-        # Set default start_date to the maximum between ten_years_ago or first available date
-        default_start_date = ten_years_ago
+            # Allow the user to modify the start date
+            start_date = st.date_input("Start date", value=default_start_date)
 
-        # Allow the user to modify the start date
-        start_date = st.date_input("Start date", value=default_start_date)
+            # Convert start_date and end_date to timezone-naive format
+            start_date = pd.Timestamp(start_date).tz_localize(None)
+            end_date = pd.Timestamp(end_date).tz_localize(None)
 
-        # Convert start_date and end_date to timezone-naive
-        start_date = pd.Timestamp(start_date).tz_localize(None)
-        end_date = pd.Timestamp(end_date).tz_localize(None)
-        start_date = start_date.strftime('%Y-%m-%d')
-        end_date = end_date.strftime('%Y-%m-%d')
+            # Validate the selected date range
+            time_difference = (pd.Timestamp(end_date) - pd.Timestamp(start_date)).days
+            ten_years_in_days = 365 * 10
+            if time_difference < ten_years_in_days:
+                st.warning(f"The selected date range has less than 10 years of data ({time_difference // 365} years).")
 
-        # Calculate the time difference between start_date and end_date
-        time_difference = (pd.Timestamp(end_date) - pd.Timestamp(start_date)).days
-        ten_years_in_days = 365 * 10
+            # Fetch historical data if API call succeeds
+            data = data1.quote.history(start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'))
 
-        # Check if the data range is less than 10 years
-        if time_difference < ten_years_in_days:
-            st.warning(f"The selected date range has less than 10 years of data ({time_difference // 365} years).")
+            # If data fetching is successful, plot and analyze it
+            if not data.empty:
+                # Display historical data plot
+                st.subheader(f"Historical Data for {ticker} - {ticker_choice.split(' - ')[1]}")
+                fig, ax = plt.subplots(figsize=(12, 6))
+                ax.plot(data['time'], data['close'], label='Historical Price', color='blue')
+                ax.set_title(f'Historical Stock Price for {ticker}')
+                ax.set_xlabel('Date')
+                ax.set_ylabel('Price')
+                ax.legend()
+                ax.grid()
+                st.pyplot(fig)
 
-        data = data1.quote.history(start=start_date, end=end_date)
-        # Display the plot of the stock's historical data
-        st.subheader(f"Historical Data for {ticker} - {ticker_choice.split(' - ')[1]}")
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.plot(data['time'], data['close'], label='Historical Price', color='blue')
-        ax.set_title(f'Historical Stock Price for {ticker}')
-        ax.set_xlabel('Date')
-        ax.set_ylabel('Price')
-        ax.legend()
-        ax.grid()
+                # ARIMA Model Configuration
+                st.subheader("ARIMA Model Configuration")
+                p = st.number_input("Enter p (autoregressive term):", min_value=0, max_value=10, value=5)
+                d = st.number_input("Enter d (difference term):", min_value=0, max_value=2, value=1)
+                q = st.number_input("Enter q (moving average term):", min_value=0, max_value=10, value=0)
 
-        # Display historical plot
-        st.pyplot(fig)
+                if st.button('Run ARIMA Model'):
+                    try:
+                        model = ARIMA(data['close'], order=(p, d, q))
+                        model_fit = model.fit()
 
-        # ARIMA model input section
-        st.subheader("ARIMA Model Configuration")
-        p = st.number_input("Enter p (autoregressive term):", min_value=0, max_value=10, value=5)
-        d = st.number_input("Enter d (difference term):", min_value=0, max_value=2, value=1)
-        q = st.number_input("Enter q (moving average term):", min_value=0, max_value=10, value=0)
+                        # Predictions
+                        data = data.set_index('time')
+                        y_predicted = model_fit.predict(start=0, end=len(data) - 1)
 
-        if st.button('Run ARIMA Model'):
-            # ARIMA Model
-            model = ARIMA(data['close'], order=(p, d, q))
-            model_fit = model.fit()
+                        # RMSE calculation
+                        rmse = np.sqrt(mean_squared_error(data['close'], y_predicted))
 
-            # Predictions
-            data = data.set_index('time')
+                        # Plot actual vs predicted
+                        fig, ax = plt.subplots(figsize=(12, 6))
+                        ax.plot(data.index, data['close'], label='Actual Price', color='blue')
+                        ax.plot(data.index, y_predicted, label='Predicted Price (ARIMA)', color='orange')
+                        ax.set_title(f'Stock Price Prediction for {ticker} - {ticker_choice.split(" - ")[1]}')
+                        ax.set_xlabel('Date')
+                        ax.set_ylabel('Price')
+                        ax.legend()
+                        ax.grid()
+                        st.pyplot(fig)
 
-            # Predict using index positions
-            start_index = 0
-            end_index = len(data) - 1
+                        # Display RMSE
+                        st.write(f"Root Mean Square Error (RMSE): {rmse}")
 
-            y_predicted = model_fit.predict(start=start_index, end=end_index)
+                    except Exception as e:
+                        st.error(f"ARIMA model could not be fit with the chosen parameters. Error: {e}")
 
-            # Compute RMSE
-            rmse = np.sqrt(mean_squared_error(data['close'], y_predicted))
+            else:
+                st.error("No data returned for the selected date range. Please adjust your dates or try another ticker.")
 
-            # Plot actual vs predicted
-            fig, ax = plt.subplots(figsize=(12, 6))
-            ax.plot(data.index, data['close'], label='Actual Price', color='blue')
-            ax.plot(data.index, y_predicted, label='Predicted Price (ARIMA)', color='orange')
-            ax.set_title(f'Stock Price Prediction for {ticker} - {ticker_choice.split(" - ")[1]}')
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Price')
-            ax.legend()
-            ax.grid()
-
-            # Display prediction plot
-            st.pyplot(fig)
-
-            # Display RMSE
-            st.write(f"Root Mean Square Error (RMSE): {rmse}")
+        except ConnectionError:
+            st.error("Failed to fetch data. Please check your internet connection or try again later.")
+        except Exception as e:
+            st.error(f"An unexpected error occurred: {e}")
 
 # Run the app
 if __name__ == "__main__":
