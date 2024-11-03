@@ -7,17 +7,18 @@ from statsmodels.tsa.stattools import adfuller
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
 import pandas as pd
+import time  # Import thư viện time
 
 
 st.title("Dự Đoán Giá Cổ Phiếu Toàn Cầu với ARIMA")
 
 # Danh sách mã cổ phiếu toàn cầu với tên tập đoàn
 global_ticker_dict = {
-    "AAPL": "Apple Inc.",
-    "MSFT": "Microsoft Corporation",
-    "GOOGL": "Alphabet Inc.",
-    "AMZN": "Amazon.com Inc.",
-    "TSLA": "Tesla Inc."
+"AAPL": "Apple Inc.",
+"MSFT": "Microsoft Corporation",
+"GOOGL": "Alphabet Inc.",
+"AMZN": "Amazon.com Inc.",
+"TSLA": "Tesla Inc."
 }
 
 # Tạo danh sách mã cổ phiếu có kèm tên tập đoàn
@@ -30,10 +31,10 @@ end_date = st.date_input("Ngày kết thúc")
 
 # Lấy dữ liệu
 if ticker and end_date:
-    data = yf.download(ticker, end=end_date)
-    if data.empty:
+data = yf.download(ticker, end=end_date)
+if data.empty:
         st.error("Không tìm thấy dữ liệu cho mã cổ phiếu này.")
-    else:
+else:
         # Hiển thị biểu đồ dữ liệu lịch sử
         st.subheader(f"Dữ Liệu Lịch Sử cho {global_ticker_dict[ticker]} ({ticker})")
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -51,23 +52,23 @@ if ticker and end_date:
         result = adfuller(close_prices)
         st.write("Giá trị p-value của kiểm định ADF:", result[1])
         if result[1] < 0.05:
-            st.write("Chuỗi dữ liệu là dừng (theo kiểm định ADF).")
-            st.write("=> Không cần sai phân, có thể chọn bậc \( d = 0 \).")
+        st.write("Chuỗi dữ liệu là dừng (theo kiểm định ADF).")
+        st.write("=> Không cần sai phân, có thể chọn bậc \( d = 0 \).")
         else:
-            st.write("Chuỗi dữ liệu không dừng. Cần sai phân để làm chuỗi ổn định.")
-            st.write("=> Chọn bậc \( d = 1 \) và thử lại kiểm định.")
+        st.write("Chuỗi dữ liệu không dừng. Cần sai phân để làm chuỗi ổn định.")
+        st.write("=> Chọn bậc \( d = 1 \) và thử lại kiểm định.")
 
         # Vẽ biểu đồ ACF và PACF
         st.subheader("Biểu Đồ ACF và PACF để Xác Định p và q")
         fig_acf, ax_acf = plt.subplots(figsize=(12, 6))
         plot_acf(close_prices, lags=40, ax=ax_acf)
         ax_acf.set_title("Biểu Đồ ACF")
-        st.pyplot(fig_acf)
+        st.pyplot(fig_acf)  # Hiển thị biểu đồ ACF
 
         fig_pacf, ax_pacf = plt.subplots(figsize=(12, 6))
         plot_pacf(close_prices, lags=40, ax=ax_pacf)
         ax_pacf.set_title("Biểu Đồ PACF")
-        st.pyplot(fig_pacf)
+        st.pyplot(fig_pacf)  # Hiển thị biểu đồ PACF
 
         # Hướng dẫn chọn tham số
         st.subheader("Hướng Dẫn Chọn Tham Số ARIMA")
@@ -84,21 +85,30 @@ if ticker and end_date:
         q = st.number_input("Nhập q (thành phần trung bình động):", min_value=0, max_value=10, value=0)
 
         if st.button('Chạy Mô Hình ARIMA'):
-            model = ARIMA(close_prices, order=(p, d, q))
-            model_fit = model.fit()
-            y_predicted = model_fit.predict(start=close_prices.index[0], end=close_prices.index[-1])
-            rmse = np.sqrt(mean_squared_error(close_prices, y_predicted))
+        start_time = time.time()  # Bắt đầu đo thời gian
 
-            # Hiển thị biểu đồ giá thực tế so với giá dự đoán
-            fig, ax = plt.subplots(figsize=(12, 6))
-            ax.plot(close_prices, label='Giá Thực Tế', color='blue')
-            ax.plot(close_prices.index, y_predicted, label='Giá Dự Đoán (ARIMA)', color='orange')
-            ax.set_title(f'Dự Đoán Giá Cổ Phiếu cho {global_ticker_dict[ticker]} ({ticker})')
-            ax.set_xlabel('Ngày')
-            ax.set_ylabel('Giá')
-            ax.legend()
-            ax.grid()
-            st.pyplot(fig)
-            st.write(f"Sai số trung bình bình phương căn (RMSE): {rmse}")
+        # Khởi chạy mô hình ARIMA
+        model = ARIMA(close_prices, order=(p, d, q))
+        model_fit = model.fit()
+        y_predicted = model_fit.predict(start=close_prices.index[0], end=close_prices.index[-1])
+        rmse = np.sqrt(mean_squared_error(close_prices, y_predicted))
+
+        end_time = time.time()  # Kết thúc đo thời gian
+        execution_time = end_time - start_time
+
+        # Hiển thị biểu đồ giá thực tế so với giá dự đoán
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.plot(close_prices, label='Giá Thực Tế', color='blue')
+        ax.plot(close_prices.index, y_predicted, label='Giá Dự Đoán (ARIMA)', color='orange')
+        ax.set_title(f'Dự Đoán Giá Cổ Phiếu cho {global_ticker_dict[ticker]} ({ticker})')
+        ax.set_xlabel('Ngày')
+        ax.set_ylabel('Giá')
+        ax.legend()
+        ax.grid()
+        st.pyplot(fig)
+
+        # Hiển thị sai số và thời gian thực thi
+        st.write(f"Sai số trung bình bình phương căn (RMSE): {rmse}")
+        st.write(f"Thời gian thực thi: {execution_time:.2f} giây")
 
 
