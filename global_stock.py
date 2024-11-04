@@ -6,8 +6,9 @@ from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.stattools import adfuller
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
+import time
 import pandas as pd
-import time  # Import thư viện time
+
 
 st.title("Dự Đoán Giá Cổ Phiếu Toàn Cầu với ARIMA")
 
@@ -83,29 +84,47 @@ if ticker and end_date:
         d = st.number_input("Nhập d (thành phần sai khác):", min_value=0, max_value=2, value=1)
         q = st.number_input("Nhập q (thành phần trung bình động):", min_value=0, max_value=10, value=0)
 
+        # Thời gian dự đoán trong tương lai
+        st.subheader("Dự Đoán Giá Cổ Phiếu Tương Lai")
+        future_days = st.number_input("Số ngày dự đoán trong tương lai:", min_value=1, max_value=365, value=30)
+
         if st.button('Chạy Mô Hình ARIMA'):
             start_time = time.time()  # Bắt đầu đo thời gian
 
             # Khởi chạy mô hình ARIMA
             model = ARIMA(close_prices, order=(p, d, q))
             model_fit = model.fit()
-            y_predicted = model_fit.predict(start=close_prices.index[0], end=close_prices.index[-1])
-            rmse = np.sqrt(mean_squared_error(close_prices, y_predicted))
-
+            
+            # Dự đoán giá tương lai
+            future_index = pd.date_range(start=close_prices.index[-1] + pd.Timedelta(days=1), periods=future_days)
+            forecast = model_fit.forecast(steps=future_days)
+            
             end_time = time.time()  # Kết thúc đo thời gian
             execution_time = end_time - start_time
 
-            # Hiển thị biểu đồ giá thực tế so với giá dự đoán
-            fig, ax = plt.subplots(figsize=(12, 6))
-            ax.plot(close_prices, label='Giá Thực Tế', color='blue')
-            ax.plot(close_prices.index, y_predicted, label='Giá Dự Đoán (ARIMA)', color='orange')
-            ax.set_title(f'Dự Đoán Giá Cổ Phiếu cho {global_ticker_dict[ticker]} ({ticker})')
-            ax.set_xlabel('Ngày')
-            ax.set_ylabel('Giá')
-            ax.legend()
-            ax.grid()
-            st.pyplot(fig)
+            # Hiển thị biểu đồ giá thực tế
+            st.subheader("Biểu Đồ Giá Thực Tế")
+            fig_actual, ax_actual = plt.subplots(figsize=(12, 6))
+            ax_actual.plot(close_prices, label='Giá Thực Tế', color='blue')
+            ax_actual.set_title(f'Giá Cổ Phiếu Thực Tế cho {global_ticker_dict[ticker]} ({ticker})')
+            ax_actual.set_xlabel('Ngày')
+            ax_actual.set_ylabel('Giá')
+            ax_actual.legend()
+            ax_actual.grid()
+            st.pyplot(fig_actual)
+
+            # Hiển thị biểu đồ giá dự đoán tương lai
+            st.subheader("Biểu Đồ Dự Đoán Giá Tương Lai")
+            fig_forecast, ax_forecast = plt.subplots(figsize=(12, 6))
+            ax_forecast.plot(future_index, forecast, label='Giá Dự Đoán (ARIMA)', color='orange')
+            ax_forecast.set_title(f'Dự Đoán Giá Cổ Phiếu cho {global_ticker_dict[ticker]} ({ticker}) trong {future_days} ngày')
+            ax_forecast.set_xlabel('Ngày')
+            ax_forecast.set_ylabel('Giá')
+            ax_forecast.legend()
+            ax_forecast.grid()
+            st.pyplot(fig_forecast)
 
             # Hiển thị sai số và thời gian thực thi
+            rmse = np.sqrt(mean_squared_error(close_prices, model_fit.fittedvalues))
             st.write(f"Sai số trung bình bình phương căn (RMSE): {rmse}")
             st.write(f"Thời gian thực thi: {execution_time:.2f} giây")
